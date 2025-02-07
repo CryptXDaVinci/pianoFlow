@@ -1,6 +1,7 @@
 const express = require('express');
 const { Readable } = require('stream');
 const ffmpeg = require('fluent-ffmpeg');
+const path = require('path');
 
 const app = express();
 const PORT = 3000;
@@ -112,6 +113,10 @@ app.get('/stream', (req, res) => {
     });
 
     console.log('Client connected to ambient stream');
+});
+
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.listen(PORT, () => {
