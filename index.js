@@ -5,6 +5,9 @@ const ffmpeg = require('fluent-ffmpeg');
 const app = express();
 const PORT = 3000;
 
+const SAMPLE_RATE = 44100;
+const MAX_VOLUME = 32767;
+
 const NOTES = {
     C3: 130.81, D3: 146.83, E3: 164.81, F3: 174.61,
     G3: 196.00, A3: 220.00, B3: 246.94,
@@ -27,45 +30,37 @@ const CHORDS = [
     ['A5', 'C6', 'E6'], ['F5', 'A5', 'C6']
 ];
 
-function generateNote(freq, duration = 0.5, volume = 0.4, reverb = false) {
-    const sampleRate = 44100;
-    const samples = Math.floor(duration * sampleRate);
+function generateNote(freq, duration = 0.5, volume = 0.4) {
+    const samples = Math.floor(duration * SAMPLE_RATE);
     const buffer = Buffer.alloc(samples * 2);
 
     for (let i = 0; i < samples; i++) {
-        let sample = Math.sin(2 * Math.PI * freq * (i / sampleRate)) * 32767 * volume;
-        if (reverb) {
-            const decay = Math.exp(-2 * i / samples);
-            sample *= decay;
-        }
-        buffer.writeInt16LE(sample | 0, i * 2);  // Casting to integer
+        const sample = Math.sin(2 * Math.PI * freq * (i / SAMPLE_RATE)) * MAX_VOLUME * volume;
+        buffer.writeInt16LE(sample | 0, i * 2);
     }
     return buffer;
 }
 
-function generateChord(chordNotes, duration = 1) {
-    const buffers = chordNotes.map(note =>
-        generateNote(NOTES[note], duration, Math.random() * 0.3 + 0.2, true)
-    );
+function generateChord(notes, duration = 1) {
+    const buffers = notes.map(note => generateNote(NOTES[note], duration, 0.3));
     const length = Math.min(...buffers.map(buf => buf.length));
     const combined = Buffer.alloc(length);
 
     for (let i = 0; i < length; i += 2) {
-        let mixedSample = buffers.reduce((acc, buf) => acc + buf.readInt16LE(i), 0);
-        mixedSample = Math.max(-32768, Math.min(32767, mixedSample / buffers.length)); 
-        combined.writeInt16LE(mixedSample | 0, i);
+        let sample = buffers.reduce((acc, buf) => acc + buf.readInt16LE(i), 0) / buffers.length;
+        sample = Math.max(-MAX_VOLUME, Math.min(MAX_VOLUME, sample));
+        combined.writeInt16LE(sample | 0, i);
     }
     return combined;
 }
 
 function generateAmbientPad(frequency = 100, duration = 3, volume = 0.1) {
-    const sampleRate = 44100;
-    const samples = Math.floor(duration * sampleRate);
+    const samples = Math.floor(duration * SAMPLE_RATE);
     const buffer = Buffer.alloc(samples * 2);
 
     for (let i = 0; i < samples; i++) {
-        const mod = Math.sin(2 * Math.PI * (frequency / 4) * (i / sampleRate));
-        const sample = Math.sin(2 * Math.PI * frequency * (i / sampleRate) + mod) * 32767 * volume;
+        const mod = Math.sin(2 * Math.PI * (frequency / 4) * (i / SAMPLE_RATE));
+        const sample = Math.sin(2 * Math.PI * frequency * (i / SAMPLE_RATE) + mod) * MAX_VOLUME * volume;
         buffer.writeInt16LE(sample | 0, i * 2);
     }
     return buffer;
@@ -73,63 +68,52 @@ function generateAmbientPad(frequency = 100, duration = 3, volume = 0.1) {
 
 function generateRandomPianoSound() {
     const isChord = Math.random() > 0.5;
-    if (isChord) {
-        const chord = CHORDS[Math.floor(Math.random() * CHORDS.length)];
-        return generateChord(chord, Math.random() * 0.5 + 0.5);
-    } else {
-        const notes = Object.keys(NOTES);
-        const randomNote = notes[Math.floor(Math.random() * notes.length)];
-        return generateNote(NOTES[randomNote], Math.random() * 0.4 + 0.3, Math.random() * 0.4 + 0.3, true);
-    }
+    return isChord
+        ? generateChord(CHORDS[Math.floor(Math.random() * CHORDS.length)], 0.8)
+        : generateNote(NOTES[Object.keys(NOTES)[Math.floor(Math.random() * Object.keys(NOTES).length)]], 0.5, 0.4);
 }
 
 app.get('/stream', (req, res) => {
     res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader('Connection', 'keep-alive');
-    res.setHeader('Keep-Alive', 'timeout=5, max=1000');
     res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Accept-Ranges', 'bytes');
-    res.setHeader('Content-Disposition', 'inline; filename="stream.mp3"');
+
     const audioStream = new Readable({ read() {} });
 
     ffmpeg(audioStream)
-    .inputFormat('s16le')
-    .audioFrequency(44100)
-    .audioChannels(1)
-    .audioCodec('libmp3lame')
-    .format('mp3')
-    .addOption('-buffer_size', '4096k') 
-    .addOption('-fflags', 'nobuffer')
-    .addOption('-flush_packets', '1')
-    .addOption('-reconnect', '1')
-    .addOption('-reconnect_streamed', '1')
-    .on('error', err => console.error('FFmpeg Error:', err))
-    .pipe(res);
-    
+        .inputFormat('s16le')
+        .audioFrequency(SAMPLE_RATE)
+        .audioChannels(1)
+        .audioCodec('libmp3lame')
+        .format('mp3')
+        .addOption('-fflags', 'nobuffer')
+        .addOption('-flush_packets', '1')
+        .on('error', err => console.error('FFmpeg Error:', err))
+        .pipe(res);
+
     const interval = setInterval(() => {
         const piano = generateRandomPianoSound();
         const pad = generateAmbientPad(80 + Math.random() * 40, 2, 0.07);
-
         const minLength = Math.min(piano.length, pad.length);
         const mixed = Buffer.alloc(minLength);
 
         for (let i = 0; i < minLength; i += 2) {
             let sample = (piano.readInt16LE(i) + pad.readInt16LE(i)) / 2;
-            sample = Math.max(-32768, Math.min(32767, sample));
+            sample = Math.max(-MAX_VOLUME, Math.min(MAX_VOLUME, sample));
             mixed.writeInt16LE(sample | 0, i);
         }
         audioStream.push(mixed);
-    }, 250);
+    }, 500);
 
     req.on('close', () => {
         clearInterval(interval);
         audioStream.push(null);
-        console.log('Client disconnected, resources cleaned up.');
+        console.log('Client disconnected, resources cleaned.');
     });
 
-    console.log('Client connected to ambient piano stream');
+    console.log('Client connected to ambient stream');
 });
 
 app.listen(PORT, () => {
-    console.log(`🎹 Ambient Piano Radio running at http://localhost:${PORT}/stream`);
+    console.log(`🎶 Ambient Piano Radio running at http://localhost:${PORT}/stream`);
 });
