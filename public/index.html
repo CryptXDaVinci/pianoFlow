@@ -1,0 +1,54 @@
+const express = require('express');
+const path = require('path');
+
+const app = express();
+const PORT = 3000;
+
+// Melayani file statis (HTML, CSS, JS)
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Route utama untuk menampilkan index.html
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Route untuk stream audio
+app.get('/stream', (req, res) => {
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Keep-Alive', 'timeout=5, max=1000');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Content-Disposition', 'inline; filename="stream.mp3"');
+
+    const { Readable } = require('stream');
+    const ffmpeg = require('fluent-ffmpeg');
+    const audioStream = new Readable({ read() {} });
+
+    ffmpeg(audioStream)
+        .inputFormat('s16le')
+        .audioFrequency(44100)
+        .audioChannels(1)
+        .audioCodec('libmp3lame')
+        .format('mp3')
+        .on('error', (err) => console.error('FFmpeg Error:', err))
+        .pipe(res);
+
+    const interval = setInterval(() => {
+        const buffer = Buffer.alloc(44100); // Buffer audio dummy
+        audioStream.push(buffer);
+    }, 500);
+
+    req.on('close', () => {
+        clearInterval(interval);
+        audioStream.push(null);
+        console.log('Client disconnected, resources cleaned up.');
+    });
+
+    console.log('Client connected to ambient piano stream');
+});
+
+// Menjalankan server
+app.listen(PORT, () => {
+    console.log(`🎹 Ambient Piano Radio running at http://localhost:${PORT}`);
+});
