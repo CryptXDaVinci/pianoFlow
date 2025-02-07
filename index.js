@@ -98,7 +98,7 @@ app.get('/stream', (req, res) => {
     .audioChannels(1)
     .audioCodec('libmp3lame')
     .format('mp3')
-    .addOption('-buffer_size', '2048k') 
+    .addOption('-buffer_size', '4096k') 
     .addOption('-fflags', 'nobuffer')
     .addOption('-flush_packets', '1')
     .addOption('-reconnect', '1')
@@ -119,7 +119,7 @@ app.get('/stream', (req, res) => {
             mixed.writeInt16LE(sample | 0, i);
         }
         audioStream.push(mixed);
-    }, 1000);
+    }, 250);
 
     req.on('close', () => {
         clearInterval(interval);
