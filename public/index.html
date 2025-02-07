@@ -1,54 +1,127 @@
-const express = require('express');
-const path = require('path');
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="description" content="Ambient Piano Radio - Streaming musik piano ambient yang menenangkan untuk fokus dan relaksasi.">
+    <meta name="keywords" content="Ambient Piano, Piano Radio, Musik Relaksasi, Streaming Musik, Fokus Musik">
+    <meta name="author" content="CryptXDaVinci">
+    <meta name="robots" content="index, follow">
 
-const app = express();
-const PORT = 3000;
+    <title>🎹 Ambient Piano Radio | CryptXDaVinci</title>
 
-// Melayani file statis (HTML, CSS, JS)
-app.use(express.static(path.join(__dirname, 'public')));
+    <!-- Favicon -->
+    <link rel="icon" href="https://cdn-icons-png.flaticon.com/512/727/727245.png" type="image/png">
 
-// Route utama untuk menampilkan index.html
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 
-// Route untuk stream audio
-app.get('/stream', (req, res) => {
-    res.setHeader('Content-Type', 'audio/mpeg');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('Keep-Alive', 'timeout=5, max=1000');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Accept-Ranges', 'bytes');
-    res.setHeader('Content-Disposition', 'inline; filename="stream.mp3"');
+    <!-- Google Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;500;700&display=swap" rel="stylesheet">
 
-    const { Readable } = require('stream');
-    const ffmpeg = require('fluent-ffmpeg');
-    const audioStream = new Readable({ read() {} });
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #141E30, #243B55);
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 20px;
+        }
 
-    ffmpeg(audioStream)
-        .inputFormat('s16le')
-        .audioFrequency(44100)
-        .audioChannels(1)
-        .audioCodec('libmp3lame')
-        .format('mp3')
-        .on('error', (err) => console.error('FFmpeg Error:', err))
-        .pipe(res);
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+        }
 
-    const interval = setInterval(() => {
-        const buffer = Buffer.alloc(44100); // Buffer audio dummy
-        audioStream.push(buffer);
-    }, 500);
+        p {
+            font-size: 1.2rem;
+            opacity: 0.85;
+        }
 
-    req.on('close', () => {
-        clearInterval(interval);
-        audioStream.push(null);
-        console.log('Client disconnected, resources cleaned up.');
-    });
+        .card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: none;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
 
-    console.log('Client connected to ambient piano stream');
-});
+        .btn-custom {
+            background-color: #76b9ff;
+            border: none;
+            color: white;
+        }
 
-// Menjalankan server
-app.listen(PORT, () => {
-    console.log(`🎹 Ambient Piano Radio running at http://localhost:${PORT}`);
-});
+        .btn-custom:hover {
+            background-color: #ffb347;
+        }
+
+        footer {
+            margin-top: 20px;
+            font-size: 0.9rem;
+            opacity: 0.7;
+        }
+
+        a {
+            color: #76b9ff;
+            text-decoration: none;
+        }
+
+        a:hover {
+            color: #ffb347;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🎹 Ambient Piano Radio</h1>
+        <p>Streaming musik piano ambient untuk fokus & relaksasi.</p>
+
+        <div class="card p-4 mt-4" style="max-width: 400px; margin: auto;">
+            <audio id="audioPlayer" class="w-100" controls autoplay>
+                <!-- Source akan diisi oleh JavaScript -->
+                Browser Anda tidak mendukung pemutar audio.
+            </audio>
+        </div>
+
+        <footer class="mt-4">
+            Dibuat dengan ❤️ oleh <a href="https://github.com/CryptXDaVinci" target="_blank">CryptXDaVinci</a>
+        </footer>
+    </div>
+
+    <!-- Bootstrap JS & Dependencies -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Auto Play Script & Dynamic BaseURL -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const player = document.getElementById('audioPlayer');
+
+            // Deteksi baseURL secara otomatis
+            const baseURL = window.location.origin;
+            const streamURL = `${baseURL}/stream`;
+
+            // Set audio source
+            player.src = streamURL;
+
+            // Autoplay dengan fallback interaksi pengguna
+            player.play().catch(() => {
+                const button = document.createElement('button');
+                button.textContent = '▶️ Putar Musik';
+                button.className = 'btn btn-custom mt-3';
+                button.addEventListener('click', () => {
+                    player.play();
+                    button.remove();
+                });
+                document.body.appendChild(button);
+            });
+        });
+    </script>
+</body>
+</html>
