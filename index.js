@@ -31,17 +31,50 @@ const CHORDS = [
     ['A5', 'C6', 'E6'], ['F5', 'A5', 'C6']
 ];
 
-function generateNote(freq, duration = 0.5, volume = 0.4) {
-    const samples = Math.floor(duration * SAMPLE_RATE);
-    const buffer = Buffer.alloc(samples * 2);
+// Fungsi untuk membuat envelope ADSR
+function applyADSR(buffer, attack = 0.01, decay = 0.1, sustain = 0.7, release = 0.2) {
+    const samples = buffer.length / 2;
+    const attackSamples = Math.floor(attack * SAMPLE_RATE);
+    const decaySamples = Math.floor(decay * SAMPLE_RATE);
+    const releaseSamples = Math.floor(release * SAMPLE_RATE);
+    const sustainSamples = samples - (attackSamples + decaySamples + releaseSamples);
 
     for (let i = 0; i < samples; i++) {
-        const sample = Math.sin(2 * Math.PI * freq * (i / SAMPLE_RATE)) * MAX_VOLUME * volume;
+        let amplitude = 1;
+        if (i < attackSamples) {
+            amplitude = i / attackSamples; // Attack
+        } else if (i < attackSamples + decaySamples) {
+            amplitude = 1 - ((i - attackSamples) / decaySamples) * (1 - sustain); // Decay
+        } else if (i < attackSamples + decaySamples + sustainSamples) {
+            amplitude = sustain; // Sustain
+        } else {
+            amplitude = sustain * (1 - ((i - (samples - releaseSamples)) / releaseSamples)); // Release
+        }
+        const sample = buffer.readInt16LE(i * 2) * amplitude;
         buffer.writeInt16LE(sample | 0, i * 2);
     }
     return buffer;
 }
 
+// Fungsi untuk menghasilkan nada dengan harmonik dan ADSR
+function generateNote(freq, duration = 0.5, volume = 0.4) {
+    const samples = Math.floor(duration * SAMPLE_RATE);
+    const buffer = Buffer.alloc(samples * 2);
+
+    for (let i = 0; i < samples; i++) {
+        const t = i / SAMPLE_RATE;
+        let sample = Math.sin(2 * Math.PI * freq * t) * 0.6; // Fundamental
+        sample += Math.sin(2 * Math.PI * freq * 2 * t) * 0.2; // 1st Overtone
+        sample += Math.sin(2 * Math.PI * freq * 3 * t) * 0.1; // 2nd Overtone
+        sample += Math.sin(2 * Math.PI * freq * 4 * t) * 0.05; // 3rd Overtone
+
+        sample *= MAX_VOLUME * volume;
+        buffer.writeInt16LE(sample | 0, i * 2);
+    }
+    return applyADSR(buffer);
+}
+
+// Fungsi untuk membuat chord dari beberapa nada
 function generateChord(notes, duration = 1) {
     const buffers = notes.map(note => generateNote(NOTES[note], duration, 0.3));
     const length = Math.min(...buffers.map(buf => buf.length));
@@ -52,28 +85,34 @@ function generateChord(notes, duration = 1) {
         sample = Math.max(-MAX_VOLUME, Math.min(MAX_VOLUME, sample));
         combined.writeInt16LE(sample | 0, i);
     }
-    return combined;
+    return applyADSR(combined, 0.02, 0.1, 0.8, 0.3);
 }
 
+// Fungsi untuk membuat ambient pad dengan vibrato
 function generateAmbientPad(frequency = 100, duration = 3, volume = 0.1) {
     const samples = Math.floor(duration * SAMPLE_RATE);
     const buffer = Buffer.alloc(samples * 2);
 
     for (let i = 0; i < samples; i++) {
-        const mod = Math.sin(2 * Math.PI * (frequency / 4) * (i / SAMPLE_RATE));
-        const sample = Math.sin(2 * Math.PI * frequency * (i / SAMPLE_RATE) + mod) * MAX_VOLUME * volume;
+        const vibrato = Math.sin(2 * Math.PI * 5 * (i / SAMPLE_RATE)) * 5; // Vibrato 5 Hz
+        const sample = Math.sin(2 * Math.PI * (frequency + vibrato) * (i / SAMPLE_RATE)) * MAX_VOLUME * volume;
         buffer.writeInt16LE(sample | 0, i * 2);
     }
-    return buffer;
+    return applyADSR(buffer, 0.5, 1, 0.6, 1.5); // Slow attack-release for pad
 }
 
+// Fungsi untuk menghasilkan suara piano acak
 function generateRandomPianoSound() {
     const isChord = Math.random() > 0.5;
+    const duration = 0.4 + Math.random() * 0.8; // Variasi durasi
+    const volume = 0.3 + Math.random() * 0.2;  // Variasi volume
+
     return isChord
-        ? generateChord(CHORDS[Math.floor(Math.random() * CHORDS.length)], 0.8)
-        : generateNote(NOTES[Object.keys(NOTES)[Math.floor(Math.random() * Object.keys(NOTES).length)]], 0.5, 0.4);
+        ? generateChord(CHORDS[Math.floor(Math.random() * CHORDS.length)], duration)
+        : generateNote(NOTES[Object.keys(NOTES)[Math.floor(Math.random() * Object.keys(NOTES).length)]], duration, volume);
 }
 
+// Endpoint streaming
 app.get('/stream', (req, res) => {
     res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader('Connection', 'keep-alive');
