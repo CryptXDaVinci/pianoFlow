@@ -84,7 +84,7 @@ function generateMelody(chord, duration = 0.4) {
     return generateNote(NOTES[melodyNote], duration, 0.35);
 }
 
-// Streaming dengan pre-buffer untuk mencegah terputus
+// Streaming musik
 app.get('/stream', (req, res) => {
     res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader('Connection', 'keep-alive');
@@ -98,7 +98,6 @@ app.get('/stream', (req, res) => {
         .audioChannels(1)
         .audioCodec('libmp3lame')
         .format('mp3')
-        .addOption('-re') // Real-time processing
         .addOption('-fflags', 'nobuffer')
         .addOption('-flush_packets', '1')
         .on('error', err => console.error('FFmpeg Error:', err))
@@ -122,7 +121,7 @@ app.get('/stream', (req, res) => {
         audioStream.push(mixed);
         chordIndex++;
 
-        setTimeout(playNextChord, 500); // Sedikit lebih cepat untuk menghindari celah
+        setTimeout(playNextChord, 1400); // Mengurangi celah antar chord
     }
 
     playNextChord();
