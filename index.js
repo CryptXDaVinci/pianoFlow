@@ -9,6 +9,7 @@ const PORT = 3000;
 const SAMPLE_RATE = 44100;
 const MAX_VOLUME = 32767;
 
+// Daftar nada (frekuensi)
 const NOTES = {
     C3: 130.81, D3: 146.83, E3: 164.81, F3: 174.61,
     G3: 196.00, A3: 220.00, B3: 246.94,
@@ -19,19 +20,15 @@ const NOTES = {
     C6: 1046.50
 };
 
-const CHORDS = [
-    ['C3', 'E3', 'G3'], ['C4', 'E4', 'G4'], ['G3', 'B3', 'D4'],
-    ['G4', 'B4', 'D5'], ['F4', 'A4', 'C5'], ['A3', 'C4', 'E4'],
-    ['A4', 'C5', 'E5'], ['D4', 'F4', 'A4'], ['E4', 'G4', 'B4'],
-    ['C4', 'E4', 'G4', 'Bb4'], ['G4', 'B4', 'D5', 'F5'],
-    ['F4', 'A4', 'C5', 'Eb5'], ['D4', 'E4', 'A4'],
-    ['D4', 'G4', 'A4'], ['G4', 'A4', 'D5'],
-    ['G4', 'C5', 'D5'], ['C4', 'E4', 'G4', 'Bb4', 'D5'],
-    ['G3', 'B3', 'D4', 'F4', 'A4'], ['C5', 'E5', 'G5'],
-    ['A5', 'C6', 'E6'], ['F5', 'A5', 'C6']
+// Progresi chord populer: I–V–vi–IV dalam C Mayor
+const CHORD_PROGRESSIONS = [
+    ['C4', 'E4', 'G4'], // C (I)
+    ['G3', 'B3', 'D4'], // G (V)
+    ['A3', 'C4', 'E4'], // Am (vi)
+    ['F3', 'A3', 'C4']  // F (IV)
 ];
 
-// Fungsi untuk membuat envelope ADSR
+// Fungsi envelope ADSR untuk dinamika suara
 function applyADSR(buffer, attack = 0.01, decay = 0.1, sustain = 0.7, release = 0.2) {
     const samples = buffer.length / 2;
     const attackSamples = Math.floor(attack * SAMPLE_RATE);
@@ -56,17 +53,16 @@ function applyADSR(buffer, attack = 0.01, decay = 0.1, sustain = 0.7, release = 
     return buffer;
 }
 
-// Fungsi untuk menghasilkan nada dengan harmonik dan ADSR
+// Fungsi untuk menghasilkan satu nada
 function generateNote(freq, duration = 0.5, volume = 0.4) {
     const samples = Math.floor(duration * SAMPLE_RATE);
     const buffer = Buffer.alloc(samples * 2);
 
     for (let i = 0; i < samples; i++) {
         const t = i / SAMPLE_RATE;
-        let sample = Math.sin(2 * Math.PI * freq * t) * 0.6; // Fundamental
-        sample += Math.sin(2 * Math.PI * freq * 2 * t) * 0.2; // 1st Overtone
-        sample += Math.sin(2 * Math.PI * freq * 3 * t) * 0.1; // 2nd Overtone
-        sample += Math.sin(2 * Math.PI * freq * 4 * t) * 0.05; // 3rd Overtone
+        let sample = Math.sin(2 * Math.PI * freq * t) * 0.6; // Nada dasar
+        sample += Math.sin(2 * Math.PI * freq * 2 * t) * 0.2; // Harmonik 1
+        sample += Math.sin(2 * Math.PI * freq * 3 * t) * 0.1; // Harmonik 2
 
         sample *= MAX_VOLUME * volume;
         buffer.writeInt16LE(sample | 0, i * 2);
@@ -74,7 +70,7 @@ function generateNote(freq, duration = 0.5, volume = 0.4) {
     return applyADSR(buffer);
 }
 
-// Fungsi untuk membuat chord dari beberapa nada
+// Fungsi untuk menghasilkan chord
 function generateChord(notes, duration = 1) {
     const buffers = notes.map(note => generateNote(NOTES[note], duration, 0.3));
     const length = Math.min(...buffers.map(buf => buf.length));
@@ -88,31 +84,13 @@ function generateChord(notes, duration = 1) {
     return applyADSR(combined, 0.02, 0.1, 0.8, 0.3);
 }
 
-// Fungsi untuk membuat ambient pad dengan vibrato
-function generateAmbientPad(frequency = 100, duration = 3, volume = 0.1) {
-    const samples = Math.floor(duration * SAMPLE_RATE);
-    const buffer = Buffer.alloc(samples * 2);
-
-    for (let i = 0; i < samples; i++) {
-        const vibrato = Math.sin(2 * Math.PI * 5 * (i / SAMPLE_RATE)) * 5; // Vibrato 5 Hz
-        const sample = Math.sin(2 * Math.PI * (frequency + vibrato) * (i / SAMPLE_RATE)) * MAX_VOLUME * volume;
-        buffer.writeInt16LE(sample | 0, i * 2);
-    }
-    return applyADSR(buffer, 0.5, 1, 0.6, 1.5); // Slow attack-release for pad
+// Fungsi untuk membuat melodi sederhana
+function generateMelody(chord, duration = 0.4) {
+    const melodyNote = chord[Math.floor(Math.random() * chord.length)];
+    return generateNote(NOTES[melodyNote], duration, 0.35);
 }
 
-// Fungsi untuk menghasilkan suara piano acak
-function generateRandomPianoSound() {
-    const isChord = Math.random() > 0.5;
-    const duration = 0.4 + Math.random() * 0.8; // Variasi durasi
-    const volume = 0.3 + Math.random() * 0.2;  // Variasi volume
-
-    return isChord
-        ? generateChord(CHORDS[Math.floor(Math.random() * CHORDS.length)], duration)
-        : generateNote(NOTES[Object.keys(NOTES)[Math.floor(Math.random() * Object.keys(NOTES).length)]], duration, volume);
-}
-
-// Endpoint streaming
+// Fungsi untuk streaming musik ambient terstruktur
 app.get('/stream', (req, res) => {
     res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader('Connection', 'keep-alive');
@@ -131,19 +109,24 @@ app.get('/stream', (req, res) => {
         .on('error', err => console.error('FFmpeg Error:', err))
         .pipe(res);
 
+    let chordIndex = 0;
+
     const interval = setInterval(() => {
-        const piano = generateRandomPianoSound();
-        const pad = generateAmbientPad(80 + Math.random() * 40, 2, 0.07);
-        const minLength = Math.min(piano.length, pad.length);
+        const currentChord = CHORD_PROGRESSIONS[chordIndex % CHORD_PROGRESSIONS.length];
+        const chord = generateChord(currentChord, 1.5);
+        const melody = generateMelody(currentChord, 0.5);
+        const minLength = Math.min(chord.length, melody.length);
         const mixed = Buffer.alloc(minLength);
 
         for (let i = 0; i < minLength; i += 2) {
-            let sample = (piano.readInt16LE(i) + pad.readInt16LE(i)) / 2;
+            let sample = (chord.readInt16LE(i) + melody.readInt16LE(i)) / 2;
             sample = Math.max(-MAX_VOLUME, Math.min(MAX_VOLUME, sample));
             mixed.writeInt16LE(sample | 0, i);
         }
+
         audioStream.push(mixed);
-    }, 500);
+        chordIndex++;
+    }, 1500); // Pergantian chord setiap 1.5 detik
 
     req.on('close', () => {
         clearInterval(interval);
